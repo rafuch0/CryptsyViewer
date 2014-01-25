@@ -1,0 +1,169 @@
+
+<html>
+<div id="markets">
+
+</div>
+<div id="marketData">
+
+</div>
+
+<div id="marketSells" style="font-family: monospace; width: 500px; float: left;">
+
+</div>
+
+<div id="marketBuys" style="font-family: monospace; width: 500px; float: left;">
+
+</div>
+<script>
+var urlAllMarkets = 'http://pubapi.cryptsy.com/api.php?method=orderdata';
+var urlOneMarket = 'http://pubapi.cryptsy.com/api.php?method=singleorderdata&marketid=';
+
+function loadJSONDataYQL(url, callback)
+{
+	var xmlhttp = new XMLHttpRequest();
+
+	xmlhttp.onreadystatechange = function()
+	{
+		if((xmlhttp.readyState == 4) && (xmlhttp.status == 200))
+		{
+			callback(filterYQLData(xmlhttp.responseText));
+		}
+	};
+
+	xmlhttp.open("GET", 'http://query.yahooapis.com/v1/public/yql?q=select%20*%20from%20html%20where%20url%3D\''+encodeURIComponent(url)+'\'%0A&format=xml&diagnostics=false&callback=foo', true);
+	xmlhttp.send();
+}
+
+function filterYQLData(data)
+{
+	data = data.replace(/^foo\(/, '');
+	data = data.replace(/\);$/, '');
+	data = JSON.parse(data);
+	if(data['results'][0])
+	{
+		data = data['results'][0];
+		data = data.split("\n")[1];
+		data = data.replace(/^.*<p>/g, '');
+		data = data.replace(/<\/p>.*$/g, '');
+
+		return JSON.parse(data);
+	}
+
+	return false;
+}
+
+var feedDataAll = '';
+var feedDataOne = '';
+var marketsData = '';
+var lastMarket = { id: '', symbol: 'ALL'};
+function getFeedDataOne(callback)
+{
+	if(lastMarket.symbol !== 'ALL')
+	{
+		console.log('Getting Feed Data One Market: '+lastMarket.symbol);
+
+		loadJSONDataYQL(urlOneMarket+lastMarket.id, function(data)
+		{
+			if(data.success === 1)
+			{
+				feedDataOne = data.return;
+				callback();
+			}
+		});
+	}
+}
+
+function getFeedDataAll(callback)
+{
+	console.log('Getting Feed Data All Markets');
+
+	loadJSONDataYQL(urlAllMarkets, function(data)
+	{
+		if(data.success === 1)
+		{
+			feedDataAll = data.return;
+			callback();
+		}
+	});
+}
+
+function showMarketsData()
+{
+	marketsData = '';
+
+	Object.keys(feedDataAll).forEach(function(value, index, data)
+	{
+		marketsData += '<span onClick="showMarketData(\''+value+'\')">'+value+'</span> ';
+	});
+
+	document.getElementById('markets').innerHTML = marketsData;
+}
+
+function showMarketData(market)
+{
+	var data;
+
+	if(market)
+	{
+		lastMarket.symbol = market;
+		lastMarket.id = feedDataAll[lastMarket.symbol].marketid;
+	}
+
+	if(feedDataOne[lastMarket.symbol])
+	{
+		data = feedDataOne[lastMarket.symbol];
+	}
+	else
+	{
+		data = feedDataAll[lastMarket.symbol];
+	}
+
+		var marketData = '';
+		marketData += 'marketid: '+data.marketid + '<br>';
+		marketData += 'label: '+data.label + '<br>';
+		marketData += 'primaryname: '+data.primaryname + '<br>';
+		marketData += 'primarycode: '+data.primarycode + '<br>';
+		marketData += 'secondaryname: '+data.secondaryname + '<br>';
+		marketData += 'secondarycode: '+data.secondarycode + '<br>';
+		marketData += 'Price Diff: ' + ''+(parseFloat(data['sellorders'][0].price) - parseFloat(data['buyorders'][0].price)).toFixed(8);
+
+		document.getElementById('marketData').innerHTML = marketData;
+
+		var sumBuys = 0;
+		var sumSells = 0;
+		var sumBoth= 0;
+		for(var i = data['buyorders'].length - 1; i >= 0; i--) sumBuys += parseFloat(data['buyorders'][i].quantity);
+		for(var i = data['sellorders'].length - 1; i >= 0; i--) sumSells += parseFloat(data['sellorders'][i].quantity);
+		sumBoth = sumBuys + sumSells;
+
+		marketData = 'Sell Orders<br><table cols=4 cellspacing=10">';
+		for(var i = 0, imax = data['sellorders'].length - 1; i < imax; i++)
+		{
+			marketData += '<tr><td>' + (parseFloat((data['sellorders'][i].quantity)/sumSells)*100).toFixed(3) + '%</td><td>' + data['sellorders'][i].price+'</td><td style="text-align: right;">'+data['sellorders'][i].quantity+'</td><td>'+data['sellorders'][i].total + '</td></tr>';
+		}
+		marketData += '</table>'
+		document.getElementById('marketSells').innerHTML = marketData;
+
+		marketData = 'Buy Orders<br><table cols=4 cellspacing=10">';
+		for(var i = 0, imax = data['buyorders'].length - 1; i < imax; i++)
+		{
+			marketData += '<tr><td>' + (parseFloat((data['buyorders'][i].quantity)/sumBuys)*100).toFixed(3) + '%</td><td>' + data['buyorders'][i].price+'</td><td style="text-align: right;">'+data['buyorders'][i].quantity+'</td><td>'+data['buyorders'][i].total + '</td></tr>';
+		}
+		marketData += '</table>'
+		document.getElementById('marketBuys').innerHTML = marketData;
+}
+
+getFeedDataAll(showMarketsData);
+
+setInterval(function()
+{
+	getFeedDataOne(showMarketData);
+}, 15000);
+
+setInterval(function()
+{
+	getFeedDataAll(showMarketsData);
+}, 60000);
+
+</script>
+</html>
